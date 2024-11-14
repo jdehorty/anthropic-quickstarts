@@ -3,6 +3,7 @@ Agentic sampling loop that calls the Anthropic API and local implementation of a
 """
 
 import platform
+import json
 from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
@@ -39,12 +40,14 @@ class APIProvider(StrEnum):
     ANTHROPIC = "anthropic"
     BEDROCK = "bedrock"
     VERTEX = "vertex"
+    OPENROUTER = "openrouter"
 
 
 PROVIDER_TO_DEFAULT_MODEL_NAME: dict[APIProvider, str] = {
     APIProvider.ANTHROPIC: "claude-3-5-sonnet-20241022",
     APIProvider.BEDROCK: "anthropic.claude-3-5-sonnet-20241022-v2:0",
     APIProvider.VERTEX: "claude-3-5-sonnet-v2@20241022",
+    APIProvider.OPENROUTER: "anthropic/claude-3-sonnet",
 }
 
 
@@ -109,6 +112,31 @@ async def sampling_loop(
             client = AnthropicVertex()
         elif provider == APIProvider.BEDROCK:
             client = AnthropicBedrock()
+        elif provider == APIProvider.OPENROUTER:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "HTTP-Referer": "https://github.com/anthropics/anthropic-quickstarts",
+                        "X-Title": "Anthropic Computer Use Demo",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": model,
+                        "messages": [{"role": "system", "content": system["text"]}] + messages,
+                        "tools": tool_collection.to_params(),
+                        "max_tokens": max_tokens
+                    }
+                )
+                if response.status_code != 200:
+                    error = APIError(
+                        message=f"OpenRouter API request failed: {response.text}",
+                        request=response.request
+                    )
+                    api_response_callback(response.request, response, error)
+                    return messages
+                return response.json()
 
         if enable_prompt_caching:
             betas.append(PROMPT_CACHING_BETA_FLAG)
