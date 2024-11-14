@@ -130,9 +130,11 @@ async def sampling_loop(
                     }
                 )
                 if response.status_code != 200:
+                    error_msg = f"OpenRouter API request failed: {response.text}"
                     error = APIError(
-                        message=f"OpenRouter API request failed: {response.text}",
-                        request=response.request
+                        message=error_msg,
+                        request=response.request,
+                        body=response.text
                     )
                     api_response_callback(response.request, response, error)
                     return messages
