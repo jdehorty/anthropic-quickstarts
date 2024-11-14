@@ -125,6 +125,26 @@ This example shows how to use the Google Cloud Application Default Credentials t
 
 You can also set `GOOGLE_APPLICATION_CREDENTIALS` to use an arbitrary credential file, see the [Google Cloud Authentication documentation](https://cloud.google.com/docs/authentication/application-default-credentials#GAC) for more details.
 
+### OpenRouter
+
+You'll need an OpenRouter API key to use Claude through OpenRouter.
+
+```bash
+export ANTHROPIC_API_KEY=%your_openrouter_api_key%
+docker run \
+    -e API_PROVIDER=openrouter \
+    -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+    -v $HOME/.anthropic:/home/computeruse/.anthropic \
+    -p 5900:5900 \
+    -p 8501:8501 \
+    -p 6080:6080 \
+    -p 8080:8080 \
+    -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
+```
+
+> [!TIP]
+> OpenRouter API keys start with `sk-or-`. You can get one by signing up at [openrouter.ai](https://openrouter.ai).
+
 ### Accessing the demo app
 
 Once the container is running, open your browser to [http://localhost:8080](http://localhost:8080) to access the combined interface that includes both the agent chat and desktop view.
