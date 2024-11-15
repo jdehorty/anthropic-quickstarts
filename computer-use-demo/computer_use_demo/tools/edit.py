@@ -25,6 +25,7 @@ class EditTool(BaseAnthropicTool):
 
     api_type: Literal["text_editor_20241022"] = "text_editor_20241022"
     name: Literal["str_replace_editor"] = "str_replace_editor"
+    tool_name: ClassVar[str] = "edit"
 
     _file_history: dict[Path, list[str]]
 
@@ -115,10 +116,10 @@ class EditTool(BaseAnthropicTool):
                 )
 
             _, stdout, stderr = await run(
-                rf"find {path} -maxdepth 2 -not -path '*/\.*'"
+                rf"find {path} -maxdepth 1 -type f -name '*.py' -not -path '*/\.*'"
             )
             if not stderr:
-                stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
+                stdout = f"Here's the Python files in {path}, excluding hidden items and libraries:\n{stdout}\n"
             return CLIResult(output=stdout, error=stderr)
 
         file_content = self.read_file(path)
