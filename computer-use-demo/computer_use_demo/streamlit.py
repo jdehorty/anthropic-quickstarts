@@ -55,6 +55,16 @@ class Sender(StrEnum):
 
 
 def setup_state():
+    # Initialize provider first
+    if "provider" not in st.session_state:
+        st.session_state.provider = (
+            os.getenv("API_PROVIDER", "anthropic") or APIProvider.ANTHROPIC
+        )
+    
+    # Initialize provider_radio immediately after provider
+    if "provider_radio" not in st.session_state:
+        st.session_state.provider_radio = st.session_state.provider
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "api_key" not in st.session_state:
@@ -62,12 +72,6 @@ def setup_state():
         st.session_state.api_key = load_from_storage("api_key") or os.getenv(
             "ANTHROPIC_API_KEY", ""
         )
-    if "provider" not in st.session_state:
-        st.session_state.provider = (
-            os.getenv("API_PROVIDER", "anthropic") or APIProvider.ANTHROPIC
-        )
-    if "provider_radio" not in st.session_state:
-        st.session_state.provider_radio = st.session_state.provider
     if "model" not in st.session_state:
         _reset_model()
     if "auth_validated" not in st.session_state:
@@ -90,8 +94,21 @@ def _reset_model():
     ]
 
 
+def _reset_auth():
+    st.session_state.auth_validated = False
+
+
+def _on_api_key_change():
+    if st.session_state.api_key:
+        save_to_storage("api_key", st.session_state.api_key)
+    _reset_auth()
+    # Force rerun to trigger immediate validation
+    st.experimental_rerun()
+
+
 async def main():
     """Render loop for streamlit"""
+    # Initialize state before any UI elements
     setup_state()
 
     st.markdown(STREAMLIT_STYLE, unsafe_allow_html=True)
@@ -102,12 +119,13 @@ async def main():
         st.warning(WARNING_TEXT)
 
     with st.sidebar:
-
         def _reset_api_provider():
             if st.session_state.provider_radio != st.session_state.provider:
-                _reset_model()
                 st.session_state.provider = st.session_state.provider_radio
-                st.session_state.auth_validated = False
+                _reset_model()
+                _reset_auth()
+                # Force rerun to trigger immediate validation
+                st.experimental_rerun()
 
         provider_options = [option.value for option in APIProvider]
         st.radio(
@@ -120,12 +138,17 @@ async def main():
 
         st.text_input("Model", key="model")
 
-        if st.session_state.provider == APIProvider.ANTHROPIC:
+        if st.session_state.provider in [APIProvider.ANTHROPIC, APIProvider.OPENROUTER]:
+            api_key_label = (
+                "Anthropic API Key"
+                if st.session_state.provider == APIProvider.ANTHROPIC
+                else "OpenRouter API Key"
+            )
             st.text_input(
-                "Anthropic API Key",
+                api_key_label,
                 type="password",
                 key="api_key",
-                on_change=lambda: save_to_storage("api_key", st.session_state.api_key),
+                on_change=_on_api_key_change,
             )
 
         st.number_input(
@@ -153,14 +176,13 @@ async def main():
                 await asyncio.sleep(1)
                 subprocess.run("./start_all.sh", shell=True)  # noqa: ASYNC221
 
-    if not st.session_state.auth_validated:
-        if auth_error := validate_auth(
-            st.session_state.provider, st.session_state.api_key
-        ):
-            st.warning(f"Please resolve the following auth issue:\n\n{auth_error}")
-            return
-        else:
-            st.session_state.auth_validated = True
+    # Validate auth before proceeding
+    auth_error = validate_auth(st.session_state.provider, st.session_state.api_key)
+    if auth_error:
+        st.warning(f"Please resolve the following auth issue:\n\n{auth_error}")
+        return
+
+    st.session_state.auth_validated = True
 
     chat, http_logs = st.tabs(["Chat", "HTTP Exchange Logs"])
     new_message = st.chat_input(
@@ -251,6 +273,14 @@ def validate_auth(provider: APIProvider, api_key: str | None):
             )
         except DefaultCredentialsError:
             return "Your google cloud credentials are not set up correctly."
+    if provider == APIProvider.OPENROUTER:
+        if not api_key:
+            return "Please enter an API key."
+        
+        if not api_key.startswith("sk-or"):
+            return "Invalid OpenRouter API key format. Should start with 'sk-or'."
+        
+        return None  # Return None explicitly when validation passes
 
 
 def load_from_storage(filename: str) -> str | None:
